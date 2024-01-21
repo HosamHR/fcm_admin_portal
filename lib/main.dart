@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'dart:math';
 
 // #docregion Import
 import 'package:collection/collection.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
-import 'package:fcm_admin_portal/autorefresh_client.dart';
 import 'package:fcm_admin_portal/models.dart';
 import 'package:fcm_admin_portal/sign_in_button.dart';
 // #enddocregion Import
@@ -16,14 +14,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/fcm/v1.dart';
 import 'package:googleapis/firestore/v1.dart';
 import 'package:googleapis/oauth2/v2.dart';
-import 'package:googleapis/sheets/v4.dart';
 import 'package:googleapis_auth/googleapis_auth.dart' as auth show AuthClient;
-import 'package:googleapis_auth/googleapis_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:retry/retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:signals/signals.dart';
 import 'package:signals/signals_flutter.dart';
 
 late final SharedPreferences sharedPreferences;
@@ -74,7 +69,10 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: getBody(),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: getBody(),
+        ),
       ),
     );
   }
@@ -199,6 +197,8 @@ class _HomeState extends State<Home> {
                   onPressed: () async {
                     // final api = FirebaseCloudMessagingApi(ViewModel.singleton._authClient.value!);
                     try {
+                      ViewModel.singleton.loadDevices();
+                      ViewModel.singleton.loadMedicationResponses();
                       //   final apiKey = 'AIzaSyBzubvH9dWZg-LtNMvx7tq__fgPbvwe3KI';
                       //   final auth = await ViewModel.singleton._account.value?.authentication;
                       //   final result = await refreshToken(
@@ -206,8 +206,6 @@ class _HomeState extends State<Home> {
                       //     'google.com',
                       //     apiKey,
                       //   );
-                      ViewModel.singleton.loadDevices();
-                      ViewModel.singleton.loadMedicationResponses();
 
                       // ScaffoldMessenger.of(context).showSnackBar(
                       //   SnackBar(
@@ -227,6 +225,7 @@ class _HomeState extends State<Home> {
               ],
             ),
           ),
+          SizedBox(width: 10),
           Expanded(
             child: ListView.separated(
               itemCount: responses.length,
@@ -292,9 +291,10 @@ class MedicationResponseTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(med.timestamp.toLocal().toString()),
-          Text(med.name.toString()),
-          Text(med.dose.toString()),
+          Text('Time: ' + med.timestamp.toLocal().toString()),
+          Text('Name: ' + med.name.toString()),
+          Text('Dose: ' + med.dose.toString()),
+          Text('Action: ' + med.prettyAction),
           Builder(
             builder: (context) {
               if (address == null) return Text('No Address');
@@ -314,6 +314,7 @@ class MedicationResponseTile extends StatelessWidget {
 class ViewModel {
   static List<String> get scopes => <String>[
         FirebaseCloudMessagingApi.firebaseMessagingScope,
+        FirestoreApi.datastoreScope,
         Oauth2Api.openidScope,
         Oauth2Api.userinfoEmailScope,
         Oauth2Api.userinfoProfileScope,
@@ -330,13 +331,10 @@ class ViewModel {
   static ViewModel get singleton => _singleton!;
 
   static late StreamSubscription sub;
+
   static void init() async {
-    print('CurrentUser: ${_googleSignIn.currentUser}');
-    final isSignedIn = await _googleSignIn.isSignedIn();
-    print('CurrentUser: ${isSignedIn}');
     final signInResult = await _googleSignIn.signInSilently(
       suppressErrors: false,
-      reAuthenticate: true,
     );
 
     final authentication = await signInResult?.authentication;
@@ -417,10 +415,7 @@ class ViewModel {
     );
 
     final address = Address.fromJson(fullAddress.body);
-    http.post(
-      Uri.parse('http://localhost:3000/log'),
-      body: fullAddress.body,
-    );
+
     return FullAddress(
       city: address.city,
       country: address.countryName,
@@ -439,11 +434,6 @@ class ViewModel {
         latitude: lat,
         longitude: long,
       ),
-    );
-
-    http.post(
-      Uri.parse('http://localhost:3000/log'),
-      body: fullAddress.toString(),
     );
 
     return FullAddress(
@@ -482,4 +472,12 @@ class FullAddress {
     this.city,
     this.fullAddress,
   });
+}
+
+extension on MedicationResponse {
+  String get prettyAction {
+    if (action.toLowerCase() == 'taken') return 'Taken';
+    if (action.toLowerCase() == 'nottaken') return 'Skip';
+    return action;
+  }
 }
