@@ -1,0 +1,1 @@
+peanut --extra-args "--base-href=/fcm_admin_portal/"
